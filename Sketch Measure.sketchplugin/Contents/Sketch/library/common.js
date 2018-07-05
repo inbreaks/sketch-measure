@@ -17,6 +17,15 @@ function _(str, data){
     });
 }
 
+function runCommand(command, args) {
+    var task = NSTask.alloc().init();
+    task.setLaunchPath_(command);
+    task.arguments = args;
+    task.launch();
+    task.waitUntilExit();
+    return (task.terminationStatus() == 0)
+}
+
 var SM = {
         init: function(context, command){
             Sketch = new API();
@@ -72,6 +81,9 @@ var SM = {
 
             if(command){
                 switch (command) {
+                    case "autoExport":
+                        this.autoExport();
+                        break;
                     case "mark-overlays":
                         this.markOverlays();
                         break;
@@ -971,7 +983,7 @@ SM.extend({
                             threadDictionary.removeObjectForKey(identifier);
                             Toolbar.close();
                         }),
-                overlayButton = self.addButton( NSMakeRect(64, 14, 20, 20), "icon-overlay",
+                            overlayButton = self.addButton( NSMakeRect(64, 14, 20, 20), "icon-overlay",
                         function(sender){
                             self.updateContext();
                             self.init(self.context, "mark-overlays");
@@ -2842,13 +2854,14 @@ SM.extend({
             }
         });
     },
-    export: function(){
-        if(this.exportPanel()){
+    export: function(obj){
+        if(obj || this.exportPanel()){
             if(this.selectionArtboards.length <= 0){
                 return false;
             }
+
             var self = this,
-                savePath = this.getSavePath();
+                savePath = obj != null ? obj.savePath : this.getSavePath();
 
             if(savePath){
                 // self.message(_("Exporting..."));
@@ -2989,6 +3002,10 @@ SM.extend({
                                 selectingPath = savePath + "/index.html";
                             }
                             NSWorkspace.sharedWorkspace().activateFileViewerSelectingURLs([NSURL.fileURLWithPath(selectingPath)]);
+                            
+                            if(obj){
+                                obj.success();
+                            }
 
                             self.message(_("Export complete!"));
                             self.wantsStop = true;
@@ -3168,3 +3185,45 @@ SM.extend({
         return content;
     }
 });
+
+
+SM.extend({
+    autoExport: function (content, data) {
+        var file_dir = this.toJSString(this.document.fileURL()).replace('file://','');
+        file_dir = file_dir.substring(0, file_dir.lastIndexOf('/'));
+        
+        this.allCount = 0;
+        var pages = this.document.pages().objectEnumerator()
+        var artboards = []
+        while(page = pages.nextObject()){
+            log('inbreak ' + 'this is autoExport debugger' + '---' + JSON.stringify({
+                "name" : this.toJSString(page.name()),
+                "objectID" : this.toJSString(page.objectID())
+            }));
+
+            if ('Symbols' == this.toJSString(page.name())){
+                continue;
+            }
+            
+            var xx = page.artboards().objectEnumerator();
+            while(artboard = xx.nextObject()){
+               this.allCount += artboard.children().count();
+               artboards.push(artboard);
+            };
+        };
+        
+        this.selectionArtboards = artboards;     
+        this.export({
+            savePath: file_dir,
+            selectionArtboards: artboards,
+            success: function(){
+                var run_sh = file_dir + "/autoRun";
+                if (NSFileManager.defaultManager().fileExistsAtPath(run_sh)) {
+                    runCommand('/bin/bash', ['-l', '-c', 'open -a Terminal ' + run_sh])
+                } else {
+                    log('inbreak ' + ' autoExport ' + 'can not find ' + run_sh);
+                }
+            }
+        });
+    }
+})
