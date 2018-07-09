@@ -2,6 +2,13 @@
     "author": "utom",
     "commands" : [
         {
+            "name": "Auto Export",
+            "identifier": "autoExport",
+            "shortcut": "ctrl shift p",
+            "handler": "autoExport",
+            "script": "mark.sketchscript"
+        },
+        {
             "name": "工具欄",
             "identifier": "commandToolbar",
             "shortcut": "ctrl shift b",
@@ -144,6 +151,7 @@
         "isRoot" : false,
         "shortcut" : "",
         "items" : [
+            "autoExport",
             "commandToolbar",
             "commandToolbar2",
             "-",
@@ -178,9 +186,9 @@
         "title" : "Sketch Measure"
     },
     "identifier": "com.utom.measure",
-    "appcast": "https://raw.githubusercontent.com/utom/sketch-measure/master/appcast.xml",
+    "appcast": "https://raw.githubusercontent.com/inbreaks/sketch-measure/master/appcast.xml",
     "homepage": "http://utom.design/measure/",
-    "version": "2.7.5",
+    "version": "2.7.6",
     "description" : "Make it a fun to create spec for developers and teammates",
     "authorEmail" : "utombox@gmail.com",
     "name" : "Sketch Measure"
