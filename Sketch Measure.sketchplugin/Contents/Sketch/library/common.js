@@ -220,8 +220,7 @@ SM.extend({
         return MSLayerGroup.new();
     },
     addShape: function(){
-        var shape = MSRectangleShape.alloc().initWithFrame(NSMakeRect(0, 0, 100, 100));
-        return MSShapeGroup.shapeWithPath(shape);
+        return MSShapeGroup.shapeWithRect(NSMakeRect(0, 0, 100, 100));
     },
     addText: function(container){
         var text = MSTextLayer.new();
@@ -369,7 +368,13 @@ SM.extend({
         };
     },
     getRadius: function(layer){
-        return ( layer.layers && this.is(layer.layers().firstObject(), MSRectangleShape) ) ? layer.layers().firstObject().fixedRadius(): 0;
+        if (layer.layers && this.is(layer.layers().firstObject(), MSRectangleShape)) {
+            return (layer.layers().firstObject().cornerRadiusString().split(';').map(Number).length == 1) ? layer.layers().firstObject().fixedRadius() : layer.layers().firstObject().cornerRadiusString().split(';').map(Number);
+        } else if (this.is(layer, MSRectangleShape)) {
+            return (layer.cornerRadiusString().split(';').map(Number).length == 1) ? layer.fixedRadius() : layer.cornerRadiusString().split(';').map(Number);
+        } else {
+            return 0;
+        }
     },
     getBorders: function(style) {
         var bordersData = [],
@@ -455,7 +460,7 @@ SM.extend({
     getStyleName: function(layer){
         var styles = (this.is(layer, MSTextLayer))? this.document.documentData().layerTextStyles(): this.document.documentData().layerStyles(),
             layerStyle = layer.style(),
-            sharedObjectID = layerStyle.sharedObjectID(),
+            sharedObjectID = layer.sharedStyleID(),
             style;
 
         styles = styles.objectsSortedByName();
@@ -481,26 +486,45 @@ SM.extend({
         return Math.round( number / 2 );
     },
     convertUnit: function(length, isText, percentageType){
-        if(percentageType && this.artboard){
-            var artboardRect = this.getRect( this.artboard );
-            if (percentageType == "width") {
-                 return Math.round((length / artboardRect.width) * 1000) / 10 + "%";
+        if (Array.isArray(length)) {
+            var units = this.configs.unit.split("/"),
+                unit = units[0];
 
+            if (units.length > 1 && isText) {
+                unit = units[1];
             }
-            else if(percentageType == "height"){
-                return Math.round((length / artboardRect.height) * 1000) / 10 + "%";
+
+            var scale = this.configs.scale;
+            var tempLegth = [];
+
+            length.forEach(function (element) {
+                tempLegth.push(Math.round(element / scale * 10) / 10);
+            });
+
+            return tempLegth.join(unit + ' ') + unit;
+
+        } else {
+
+            if (percentageType && this.artboard) {
+                var artboardRect = this.getRect( this.artboard);
+                if (percentageType == "width") {
+                    return Math.round((length / artboardRect.width) * 1000) / 10 + "%";
+                }
+                else if (percentageType == "height") {
+                    return Math.round((length / artboardRect.height) * 1000) / 10 + "%";
+                }
             }
+
+            var length = Math.round( length / this.configs.scale * 10) / 10,
+                units = this.configs.unit.split("/"),
+                unit = units[0];
+
+            if ( nits.length > 1 && isText) {
+                unit = units[1];
+            }
+
+            return length + unit;
         }
-
-        var length = Math.round( length / this.configs.scale * 10 ) / 10,
-            units = this.configs.unit.split("/"),
-            unit = units[0];
-
-        if( units.length > 1 && isText){
-            unit = units[1];
-        }
-
-        return length + unit;
     },
     toHex:function(c) {
         var hex = Math.round(c).toString(16).toUpperCase();
@@ -667,11 +691,12 @@ SM.extend({
                 border.position = 1;
             }
 
-            const s = MSSharedStyle.alloc().initWithName_firstInstance(name, style);
+            const s = MSSharedStyle.alloc().initWithName_style(name, style);
             sharedStyles.addSharedObject(s);
         }
 
-        return (style.newInstance)? style.newInstance(): style;
+        var style = this.find({ key: "(name != NULL) && (name == %@)", match: name }, sharedStyles);
+        return style;
     },
     sharedTextStyle: function(name, color, alignment){
         var sharedStyles = this.document.documentData().layerTextStyles(),
@@ -691,12 +716,13 @@ SM.extend({
             text.setTextAlignment(alignment);
 
             style = text.style();
-            const s = MSSharedStyle.alloc().initWithName_firstInstance(name, style);
+            const s = MSSharedStyle.alloc().initWithName_style(name, style);
             sharedStyles.addSharedObject(s);
             this.removeLayer(text);
         }
 
-        return (style.newInstance)? style.newInstance(): style;
+        var style = this.find({ key: "(name != NULL) && (name == %@)", match: name }, sharedStyles);
+        return style;
     }
 });
 
@@ -717,7 +743,7 @@ SM.extend({
             shapeTemp = this.addShape();
 
         if(styles){
-            shapeTemp.setStyle(styles.layer);
+            shapeTemp.setSharedStyle(styles.layer);
         }
         else{
             shapeTemp.style().addStylePartOfType(0);
@@ -828,8 +854,8 @@ SM.extend({
             textTemp = this.addText();
 
         if(styles){
-            shapeTemp.setStyle(styles.layer);
-            textTemp.setStyle(styles.text);
+            shapeTemp.setSharedStyle(styles.layer);
+            textTemp.setSharedStyle(styles.text);
         }
         else{
             shape.style().addStylePartOfType(0);
@@ -1378,7 +1404,7 @@ SM.extend({
         temp.setStringValue(text);
         temp.setTextBehaviour(1);
         temp.setTextBehaviour(0);
-        temp.setStyle(styles.text);
+        temp.setSharedStyle(styles.text);
 
         var tempRect = this.getRect(temp),
             ruler = this.setRuler({
@@ -1542,7 +1568,7 @@ SM.extend({
 
         container.addLayers([overlay]);
 
-        overlay.setStyle(overlayStyle);
+        overlay.setSharedStyle(overlayStyle);
         overlay.setName("overlay");
         overlayRect.setX(targetRect.x);
         overlayRect.setY(targetRect.y);
@@ -1629,7 +1655,7 @@ SM.extend({
                     content.push("opacity: " + Math.round( targetStyle.contextSettings().opacity() * 100) + "%");
                     break;
                 case "radius":
-                    if(self.is(target, MSShapeGroup) && self.is(target.layers().firstObject(), MSRectangleShape)){
+                    if ((self.is(target, MSShapeGroup) && self.is(target.layers().firstObject(), MSRectangleShape)) || self.is(target, MSRectangleShape)) {
                         content.push("radius: " + self.convertUnit( self.getRadius(target) ) );
                     }
                     break;
@@ -1969,8 +1995,8 @@ SM.extend({
         text.setStringValue(target.stringValue());
         text.setTextBehaviour(1);
         text.setTextBehaviour(0);
-        note.setStyle(noteStyle.layer);
-        text.setStyle(noteStyle.text);
+        note.setSharedStyle(noteStyle.layer);
+        text.setSharedStyle(noteStyle.text);
 
         var noteRect = this.getRect(note),
             textRect = this.getRect(text),
@@ -2365,6 +2391,12 @@ SM.extend({
     isExportable: function(layer) {
         return this.is(layer, MSTextLayer) ||
                this.is(layer, MSShapeGroup) ||
+               this.is(layer, MSRectangleShape) ||
+               this.is(layer, MSOvalShape) ||
+               this.is(layer, MSShapePathLayer) ||
+               this.is(layer, MSTriangleShape) ||
+               this.is(layer, MSStarShape) ||
+               this.is(layer, MSPolygonShape) ||
                this.is(layer, MSBitmapLayer) ||
                this.is(layer, MSSliceLayer) ||
                this.is(layer, MSSymbolInstance) ||
@@ -3082,7 +3114,9 @@ SM.extend({
             layerStates = this.getStates(layer);
 
         if(layer && this.is(layer, MSLayerGroup) && /NOTE\#/.exec(layer.name())){
-            var textLayer = layer.children()[3];
+            for (var i = 0; i < layer.children().count(); i++) {
+                if(this.is(layer.children()[i], MSTextLayer)) var textLayer = layer.children()[i];
+            }
 
             data.notes.push({
                 rect: this.rectToJSON(textLayer.absoluteRect(), artboardRect),
@@ -3097,7 +3131,8 @@ SM.extend({
             ( layerStates.isLocked && !this.is(layer, MSSliceLayer) ) ||
             layerStates.isEmpty ||
             layerStates.hasSlice ||
-            layerStates.isMeasure
+            layerStates.isMeasure ||
+            layer.isMasked()
         ){
             return this;
         }
@@ -3166,7 +3201,13 @@ SM.extend({
             var c = layerCSSAttributes[i]
             if(! /\/\*/.exec(c) ) css.push(this.toJSString(c));
         }
-        if(css.length > 0) layerData.css = css;
+
+        if (css.length > 0 || layer.CSSAttributes().length > 0) {
+            layerData.css = css;
+            if (this.is(layer, MSRectangleShape) && !!layer.cornerRadiusString() && layer.cornerRadiusString() != 0) {
+                layerData.css.push('border-radius: ' + layer.cornerRadiusString().replace(/;/g, 'px ') + 'px;');
+            }
+        }
 
         this.getMask(group, layer, layerData, layerStates);
         this.getSlice(layer, layerData, symbolLayer);
